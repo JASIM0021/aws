@@ -117,10 +117,3 @@ If you have improvements or want to add more automated server tools, feel free t
 
 ---
 
-
-✅ badges
-✅ examples section
-✅ versioning
-✅ a GIF demo of usage
-
-Just say **"improve README"**.

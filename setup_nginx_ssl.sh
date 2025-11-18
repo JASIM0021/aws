@@ -1,8 +1,7 @@
 #!/bin/bash
 
 echo "=============================="
-echo "  NGINX + SSL Setup Script    "
-echo " (Ubuntu + Amazon Linux 2)    "
+echo "   NGINX + SSL Setup Script   "
 echo "=============================="
 echo ""
 
@@ -10,49 +9,26 @@ echo ""
 read -p "Enter your domain name (e.g., api.example.com): " DOMAIN
 read -p "Enter the backend port to proxy (e.g., 5000): " PORT
 
-# Detect OS type (Ubuntu uses apt, Amazon Linux uses yum)
-if command -v apt >/dev/null 2>&1; then
-    OS="ubuntu"
-    PKG_INSTALL="sudo apt install -y"
-    PKG_UPDATE="sudo apt update -y"
-elif command -v yum >/dev/null 2>&1; then
-    OS="amazon"
-    PKG_INSTALL="sudo yum install -y"
-    PKG_UPDATE="sudo yum update -y"
-else
-    echo "❌ Unsupported OS. Only Ubuntu/Debian or Amazon Linux/CentOS are supported."
-    exit 1
-fi
-
-echo "Detected OS: $OS"
-echo ""
-
+# Update system
 echo "Updating system packages..."
-$PKG_UPDATE
+sudo apt update -y
 
+# Install Nginx
 echo "Installing Nginx..."
-if [ "$OS" == "amazon" ]; then
-    sudo amazon-linux-extras install nginx1 -y
-else
-    $PKG_INSTALL nginx
-fi
+sudo apt install -y nginx
 
+# Enable and start Nginx
 sudo systemctl enable nginx
 sudo systemctl start nginx
 
-# Nginx config paths differ per OS
-if [ "$OS" == "amazon" ]; then
-    CONFIG_PATH="/etc/nginx/conf.d/$DOMAIN.conf"
-else
-    CONFIG_PATH="/etc/nginx/sites-available/$DOMAIN"
-fi
+# Create Nginx site configuration
+CONFIG_PATH="/etc/nginx/sites-available/$DOMAIN"
+echo "Creating Nginx config for $DOMAIN..."
 
-echo "Creating Nginx config at $CONFIG_PATH ..."
 sudo bash -c "cat > $CONFIG_PATH" <<EOF
 server {
     listen 80;
     listen [::]:80;
-
     server_name $DOMAIN;
 
     client_max_body_size 200M;
@@ -71,39 +47,39 @@ server {
 }
 EOF
 
-# For Ubuntu enable site
-if [ "$OS" == "ubuntu" ]; then
-    sudo ln -sf $CONFIG_PATH /etc/nginx/sites-enabled/
-fi
-
+# Enable the new site
+sudo ln -sf "$CONFIG_PATH" /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
-echo "Installing Certbot (Let's Encrypt)..."
-if [ "$OS" == "amazon" ]; then
-    sudo yum install -y python3-certbot-nginx
-else
-    sudo apt install -y certbot python3-certbot-nginx
-fi
+# Install Certbot
+echo "Installing Certbot..."
+sudo apt install -y certbot python3-certbot-nginx
 
-echo "Requesting SSL certificate for $DOMAIN ..."
-sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m admin@$DOMAIN || {
-    echo "⚠️  Certbot failed due to rate limits or DNS issues. Continuing without SSL."
+# Request SSL Certificate
+echo "Requesting SSL certificate for $DOMAIN..."
+sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m admin@"$DOMAIN" || {
+    echo "⚠️  Certbot failed (DNS issue or rate limit). Continuing without SSL."
 }
 
-echo "Setting up SSL auto-renewal..."
-sudo bash -c '(crontab -l 2>/dev/null; echo "0 0 * * * certbot renew --nginx --quiet") | crontab -'
+# Auto-renewal
+echo "Setting up SSL auto-renewal cron job..."
+(crontab -l 2>/dev/null; echo "0 0 * * * certbot renew --nginx --quiet") | crontab -
 
+# Restart Nginx
 sudo systemctl restart nginx
 
+# Output summary
 echo ""
 echo "✅ Nginx + SSL setup complete!"
 echo "--------------------------------"
 echo "Domain: $DOMAIN"
 echo "Backend port: $PORT"
-echo "Config file: $CONFIG_PATH"
+echo "Nginx config: $CONFIG_PATH"
 echo "--------------------------------"
-echo "If SSL failed, run manually:"
+echo "If SSL failed due to DNS or rate limits, run later:"
 echo "sudo certbot --nginx -d $DOMAIN"
 echo ""
-echo "Visit: http://$DOMAIN  |  https://$DOMAIN"
+echo "Your site should now be accessible:"
+echo "➡  http://$DOMAIN"
+echo "➡  https://$DOMAIN"
 echo ""

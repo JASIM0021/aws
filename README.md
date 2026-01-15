@@ -69,6 +69,11 @@ chmod +x setup.sh
 sudo ./setup.sh
 ```
 
+```bash
+curl -o setup_nginx_ssl.sh https://raw.githubusercontent.com/JASIM0021/aws/refs/heads/main/setup_nginx_ssl.sh
+chmod +x setup_nginx_ssl.sh
+sudo ./setup_nginx_ssl.sh
+```
 ---
 
 ## 🛠 Features Included

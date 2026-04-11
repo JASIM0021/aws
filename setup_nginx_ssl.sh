@@ -5,27 +5,40 @@ echo "   NGINX + SSL Setup Script   "
 echo "=============================="
 echo ""
 
-# Ask for inputs
+# Ask for inputs (must run as the invoking user, not root)
 read -p "Enter your domain name (e.g., api.example.com): " DOMAIN
 read -p "Enter the backend port to proxy (e.g., 5000): " PORT
 
+# Validate inputs
+if [[ -z "$DOMAIN" || -z "$PORT" ]]; then
+    echo "❌ Domain and port are required."
+    exit 1
+fi
+
+echo "Domain: $DOMAIN"
+echo "Port: $PORT"
+
 # Update system
 echo "Updating system packages..."
-sudo apt update -y
+apt update -y
 
 # Install Nginx
 echo "Installing Nginx..."
-sudo apt install -y nginx
+apt install -y nginx
 
-# Enable and start Nginx
-sudo systemctl enable nginx
-sudo systemctl start nginx
+# Remove any broken symlinks in sites-enabled
+find /etc/nginx/sites-enabled/ -maxdepth 1 -type l | while read link; do
+    if [ ! -e "$link" ]; then
+        echo "Removing broken symlink: $link"
+        rm "$link"
+    fi
+done
 
 # Create Nginx site configuration
 CONFIG_PATH="/etc/nginx/sites-available/$DOMAIN"
 echo "Creating Nginx config for $DOMAIN..."
 
-sudo bash -c "cat > $CONFIG_PATH" <<EOF
+cat > "$CONFIG_PATH" <<EOF
 server {
     listen 80;
     listen [::]:80;
@@ -48,16 +61,18 @@ server {
 EOF
 
 # Enable the new site
-sudo ln -sf "$CONFIG_PATH" /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+ln -sf "$CONFIG_PATH" /etc/nginx/sites-enabled/
+
+# Test and reload Nginx
+nginx -t && systemctl enable nginx && systemctl restart nginx
 
 # Install Certbot
 echo "Installing Certbot..."
-sudo apt install -y certbot python3-certbot-nginx
+apt install -y certbot python3-certbot-nginx
 
 # Request SSL Certificate
 echo "Requesting SSL certificate for $DOMAIN..."
-sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m admin@"$DOMAIN" || {
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@$DOMAIN" || {
     echo "⚠️  Certbot failed (DNS issue or rate limit). Continuing without SSL."
 }
 
@@ -66,9 +81,8 @@ echo "Setting up SSL auto-renewal cron job..."
 (crontab -l 2>/dev/null; echo "0 0 * * * certbot renew --nginx --quiet") | crontab -
 
 # Restart Nginx
-sudo systemctl restart nginx
+systemctl restart nginx
 
-# Output summary
 echo ""
 echo "✅ Nginx + SSL setup complete!"
 echo "--------------------------------"
@@ -82,4 +96,3 @@ echo ""
 echo "Your site should now be accessible:"
 echo "➡  http://$DOMAIN"
 echo "➡  https://$DOMAIN"
-echo ""
